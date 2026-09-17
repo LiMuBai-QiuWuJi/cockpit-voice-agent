@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM 车载语音中台演示</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            padding: 20px 30px;
+            border-bottom: 1px solid #334155;
+            background: #1e293b;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header h1 { font-size: 20px; color: #38bdf8; }
+        header p { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+        .mode-switch {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .mode-switch span { font-size: 13px; color: #94a3b8; }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 26px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #475569;
+            transition: .3s;
+            border-radius: 26px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #38bdf8; }
+        input:checked + .slider:before { transform: translateX(22px); }
+        body.offline-mode { border-top: 3px solid #f59e0b; }
+        body.offline-mode header h1 { color: #f59e0b; }
+        .container {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+        }
+        .panel {
+            background: #1e293b;
+            border-radius: 16px;
+            border: 1px solid #334155;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+        }
+        .car-panel { flex: 1; min-width: 360px; }
+        .chat-panel { flex: 1.2; min-width: 360px; }
+        .section-title {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .car-stage {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+        }
+        .car-svg {
+            filter: drop-shadow(0 10px 30px rgba(0,0,0,0.5));
+        }
+        .window-open {
+            fill: #7dd3fc;
+            stroke: #38bdf8;
+            stroke-width: 2px;
+            filter: drop-shadow(0 0 8px rgba(125, 211, 252, 0.8));
+            transition: all 0.4s ease;
+        }
+        .window-close {
+            fill: #475569;
+            stroke: #334155;
+            stroke-width: 1px;
+            transition: all 0.4s ease;
+        }
+        .window-pulse {
+            animation: pulse-window 0.6s ease;
+        }
+        @keyframes pulse-window {
+            0% { filter: drop-shadow(0 0 2px rgba(125, 211, 252, 0.2)); }
+            50% { filter: drop-shadow(0 0 18px rgba(125, 211, 252, 1)); }
+            100% { filter: drop-shadow(0 0 8px rgba(125, 211, 252, 0.8)); }
+        }
+        .car-body-active {
+            animation: pulse-car 0.8s ease;
+        }
+        @keyframes pulse-car {
+            0% { stroke: #475569; }
+            50% { stroke: #38bdf8; }
+            100% { stroke: #475569; }
+        }
+        .airflow {
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        .airflow.on {
+            opacity: 0.7;
+            animation: flow 1.2s linear infinite;
+        }
+        @keyframes flow {
+            0% { transform: translateY(0); opacity: 0.3; }
+            50% { opacity: 0.9; }
+            100% { transform: translateY(-20px); opacity: 0.3; }
+        }
+        .hvac-panel {
+            background: #0f172a;
+            border-radius: 12px;
+            padding: 16px 24px;
+            width: 100%;
+            max-width: 280px;
+            border: 1px solid #334155;
+        }
+        .hvac-panel h3 {
+            font-size: 13px;
+            color: #38bdf8;
+            margin-bottom: 12px;
+        }
+        .hvac-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            margin: 8px 0;
+        }
+        .hvac-row span:last-child { color: #38bdf8; font-weight: 600; }
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+            max-height: 520px;
+        }
+        .message {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 14px;
+            font-size: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+        .message.user {
+            align-self: flex-end;
+            background: #2563eb;
+            border-bottom-right-radius: 4px;
+        }
+        .message.assistant {
+            align-self: flex-start;
+            background: #334155;
+            border-bottom-left-radius: 4px;
+        }
+        .message.actions {
+            align-self: flex-start;
+            background: #0f172a;
+            border: 1px solid #334155;
+            font-size: 12px;
+            color: #94a3b8;
+            font-family: "SFMono-Regular", Consolas, monospace;
+        }
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+        .input-area input {
+            flex: 1;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: #e2e8f0;
+            font-size: 14px;
+            outline: none;
+        }
+        .input-area input:focus { border-color: #38bdf8; }
+        .input-area button {
+            background: #38bdf8;
+            color: #0f172a;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .input-area button:hover { background: #7dd3fc; }
+        .input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .hint {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <h1>LLM 车载语音指令中台</h1>
+            <p>输入自然语言指令，观察 LLM 如何解析意图并驱动车控工具</p>
+        </div>
+        <div class="mode-switch">
+            <span id="mode-label">在线</span>
+            <label class="switch">
+                <input type="checkbox" id="mode-toggle" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
+    </header>
+    <div class="container">
+        <div class="panel car-panel">
+            <div class="section-title">车辆状态</div>
+            <div class="car-stage">
+                <svg class="car-svg" width="260" height="360" viewBox="0 0 260 360">
+                    <!-- 车身 -->
+                    <rect x="30" y="30" width="200" height="300" rx="40" fill="#1e293b" stroke="#475569" stroke-width="3"/>
+                    <!-- 前挡 -->
+                    <rect x="60" y="55" width="140" height="50" rx="8" fill="#7dd3fc" opacity="0.4"/>
+                    <!-- 后挡 -->
+                    <rect x="60" y="255" width="140" height="50" rx="8" fill="#7dd3fc" opacity="0.4"/>
+                    <!-- 天窗 -->
+                    <rect x="95" y="150" width="70" height="60" rx="6" fill="#334155"/>
+                    <!-- 四个车窗 -->
+                    <rect id="window-fl" class="window-close" x="55" y="120" width="55" height="35" rx="4"/>
+                    <rect id="window-fr" class="window-close" x="150" y="120" width="55" height="35" rx="4"/>
+                    <rect id="window-rl" class="window-close" x="55" y="205" width="55" height="35" rx="4"/>
+                    <rect id="window-rr" class="window-close" x="150" y="205" width="55" height="35" rx="4"/>
+                    <!-- 空调出风气流 -->
+                    <g id="airflow-group" class="airflow">
+                        <line x1="100" y1="200" x2="100" y2="185" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round"/>
+                        <line x1="130" y1="200" x2="130" y2="185" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round"/>
+                        <line x1="160" y1="200" x2="160" y2="185" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round"/>
+                    </g>
+                    <!-- 轮子 -->
+                    <circle cx="30" cy="100" r="14" fill="#0f172a" stroke="#475569" stroke-width="2"/>
+                    <circle cx="230" cy="100" r="14" fill="#0f172a" stroke="#475569" stroke-width="2"/>
+                    <circle cx="30" cy="260" r="14" fill="#0f172a" stroke="#475569" stroke-width="2"/>
+                    <circle cx="230" cy="260" r="14" fill="#0f172a" stroke="#475569" stroke-width="2"/>
+                    <!-- 方位标注 -->
+                    <text x="130" y="25" text-anchor="middle" fill="#64748b" font-size="12">前</text>
+                    <text x="130" y="345" text-anchor="middle" fill="#64748b" font-size="12">后</text>
+                </svg>
+                <div class="hvac-panel">
+                    <h3>空调</h3>
+                    <div class="hvac-row"><span>开关</span><span id="hvac-power">关</span></div>
+                    <div class="hvac-row"><span>温度</span><span id="hvac-temp">24°C</span></div>
+                    <div class="hvac-row"><span>风量</span><span id="hvac-fan">2</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="panel chat-panel">
+            <div class="section-title">语音交互</div>
+            <div class="chat-history" id="chat-history"></div>
+            <div class="input-area">
+                <input id="user-input" type="text" placeholder="输入指令，例如：把空调调到23度并打开副驾车窗" />
+                <button id="send-btn" onclick="sendMessage()">发送</button>
+            </div>
+            <div class="hint">提示：试试"打开空调"、"把温度调到26度"、"关闭所有车窗"等指令</div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "http://127.0.0.1:5000";
+        let currentState = null;
+
+        const historyEl = document.getElementById("chat-history");
+        const inputEl = document.getElementById("user-input");
+        const sendBtn = document.getElementById("send-btn");
+        const modeToggle = document.getElementById("mode-toggle");
+        const modeLabel = document.getElementById("mode-label");
+
+        function appendMessage(role, text) {
+            const div = document.createElement("div");
+            div.className = "message " + role;
+            div.textContent = text;
+            historyEl.appendChild(div);
+            historyEl.scrollTop = historyEl.scrollHeight;
+        }
+
+        function triggerPulse(el) {
+            el.classList.remove("window-pulse");
+            void el.offsetWidth; // 触发重排，重置动画
+            el.classList.add("window-pulse");
+            setTimeout(() => el.classList.remove("window-pulse"), 600);
+        }
+
+        function updateCarState(state) {
+            currentState = state;
+            const hvac = state.hvac || {};
+            const windows = state.window || {};
+
+            const prevHvac = (currentState && currentState.hvac) || {};
+            const hvacChanged = prevHvac.power !== hvac.power ||
+                                prevHvac.temperature !== hvac.temperature ||
+                                prevHvac.fan_speed !== hvac.fan_speed;
+
+            document.getElementById("hvac-power").textContent = hvac.power ? "开" : "关";
+            document.getElementById("hvac-temp").textContent = (hvac.temperature || "--") + "°C";
+            document.getElementById("hvac-fan").textContent = hvac.fan_speed ?? "--";
+
+            const airflowGroup = document.getElementById("airflow-group");
+            if (hvac.power) {
+                airflowGroup.classList.add("on");
+            } else {
+                airflowGroup.classList.remove("on");
+            }
+
+            const windowMap = {
+                "front_left": "window-fl",
+                "front_right": "window-fr",
+                "rear_left": "window-rl",
+                "rear_right": "window-rr",
+            };
+            let anyWindowChanged = false;
+            for (const [key, id] of Object.entries(windowMap)) {
+                const el = document.getElementById(id);
+                const isOpen = !!windows[key];
+                const wasOpen = el.classList.contains("window-open");
+                if (isOpen !== wasOpen) {
+                    anyWindowChanged = true;
+                    if (isOpen) {
+                        el.classList.remove("window-close");
+                        el.classList.add("window-open");
+                    } else {
+                        el.classList.remove("window-open");
+                        el.classList.add("window-close");
+                    }
+                    triggerPulse(el);
+                }
+            }
+
+            if (hvacChanged || anyWindowChanged) {
+                const carBody = document.querySelector(".car-svg rect:first-child");
+                carBody.classList.remove("car-body-active");
+                void carBody.offsetWidth;
+                carBody.classList.add("car-body-active");
+                setTimeout(() => carBody.classList.remove("car-body-active"), 800);
+            }
+        }
+
+        function updateModeUI(online) {
+            modeToggle.checked = online;
+            modeLabel.textContent = online ? "在线" : "离线";
+            if (online) {
+                document.body.classList.remove("offline-mode");
+            } else {
+                document.body.classList.add("offline-mode");
+            }
+        }
+
+        async function initMode() {
+            try {
+                const res = await fetch(`${API_BASE}/api/mode`);
+                const data = await res.json();
+                updateModeUI(data.online);
+            } catch (e) {
+                console.log("获取模式失败", e);
+            }
+        }
+
+        modeToggle.addEventListener("change", async () => {
+            const online = modeToggle.checked;
+            try {
+                await fetch(`${API_BASE}/api/mode`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ online }),
+                });
+                updateModeUI(online);
+                appendMessage("assistant", online ? "已切换至在线模式" : "已切换至离线模式（本地规则匹配）");
+            } catch (e) {
+                appendMessage("assistant", "模式切换失败：" + e.message);
+            }
+        });
+
+        async function initState() {
+            try {
+                const res = await fetch(`${API_BASE}/api/state`);
+                const state = await res.json();
+                updateCarState(state);
+            } catch (e) {
+                appendMessage("assistant", "无法连接后端服务，请确认已运行 python web_server.py");
+            }
+        }
+
+        async function sendMessage() {
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            appendMessage("user", text);
+            inputEl.value = "";
+            sendBtn.disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/chat`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ user_input: text, car_state: currentState }),
+                });
+                const data = await res.json();
+
+                appendMessage("assistant", data.say || "（无回复）");
+                if (data.actions && data.actions.length > 0) {
+                    const summary = data.actions.map(a => `${a.tool}: ${JSON.stringify(a.args)}`).join("\n");
+                    appendMessage("actions", "操作记录:\n" + summary);
+                }
+                if (data.car_state) updateCarState(data.car_state);
+                if (typeof data.online === "boolean") updateModeUI(data.online);
+            } catch (e) {
+                appendMessage("assistant", "请求失败：" + e.message);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+
+        inputEl.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") sendMessage();
+        });
+
+        initMode();
+        initState();
+    </script>
+</body>
+</html>

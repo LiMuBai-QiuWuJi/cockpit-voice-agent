@@ -1,42 +1,30 @@
 import json
+from dataclasses import dataclass,field
 from typing import Any, Callable
 from openai import OpenAI
 
 
+@dataclass
 class CallParameters:
-    """LLM 调用参数封装，支持链式 setter（Builder 模式）。"""
+    api_key: str = ""
+    base_url: str = ""
 
-    def __init__(self):
-        self.api_key: str = ""
-        self.base_url: str = ""
-        self.system_prompt: str = ""
-        self.user_input: str = ""
-        self.tools: list[dict[str, Any]] = []
-        self.tool_map: dict[str, Callable] = {}
+    system_prompt: str = ""
+    user_input: str = ""
 
-    def with_api_key(self, api_key: str):
-        self.api_key = api_key
-        return self
+    model:str = ""
+    max_tokens:int = 4096
+    temperature:float = 0.4
+    timeout:float = 3
+    stream: bool = False
+    tools: list[dict] = field(default_factory=list)
+    tool_choice: str = "auto"
 
-    def with_base_url(self, base_url: str):
-        self.base_url = base_url
-        return self
-
-    def with_system_prompt(self, system_prompt: str):
-        self.system_prompt = system_prompt
-        return self
-
-    def with_user_input(self, user_input: str):
-        self.user_input = user_input
-        return self
-
-    def with_tools(self, tools: list[dict[str, Any]]):
-        self.tools = tools
-        return self
-
-    def with_tool_map(self, tool_map: dict[str, Callable]):
-        self.tool_map = tool_map
-        return self
+    tool_map: dict[str, Callable] = field(default_factory=dict)
+    context_mode: str = "none"      
+    """  none | recent | unlimited  \n无 | 最近 | 无限"""
+    context_window: int = 0
+    """  recent 模式时保留最近 N 轮  """
 
 
 class ChatSession:
@@ -71,7 +59,9 @@ class ChatSession:
         })
 
 
-def call_llm(parameters: CallParameters):
+def call_llm(parameters: CallParameters) -> json:
+    from openai.types.chat import ChatCompletion
+
     client = OpenAI(api_key=parameters.api_key, base_url=parameters.base_url)
 
     session = ChatSession(parameters.system_prompt)
@@ -81,11 +71,15 @@ def call_llm(parameters: CallParameters):
     actions = []
 
     while True:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
+        response:ChatCompletion = client.chat.completions.create(
+            model=parameters.model,
             messages=session.messages,
+            max_tokens=parameters.max_tokens,
+            temperature=parameters.temperature,
+            timeout=parameters.timeout,
+            stream=parameters.stream,
             tools=parameters.tools,
-            tool_choice="auto",
+            tool_choice=parameters.tool_choice
         )
         msg = response.choices[0].message
 
