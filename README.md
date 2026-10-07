@@ -196,6 +196,12 @@ cockpit-voice-agent/
 
 ---
 
+## 演示视频
+
+在线 / 离线双模式控车演示（25 秒）：复合指令「把空调调到 23 度并打开副驾车窗」一次性拆解下发，随后切换离线模式展示规则库兜底。
+
+<video src="docs/demo.mp4" controls="controls" muted="muted" style="max-width:100%"></video>
+
 ## 运行截图
 
 ### 初始状态
